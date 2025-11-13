@@ -13,10 +13,27 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/todo-app';
 
-// Middleware
+// Middleware - CORS configuration
 app.use(cors({
-  origin: ['http://localhost:4200', 'https://*.pages.dev', /\.pages\.dev$/],
-  credentials: true
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+
+    // Allow localhost for development
+    if (origin === 'http://localhost:4200') {
+      return callback(null, true);
+    }
+
+    // Allow all Cloudflare Pages domains
+    if (origin.endsWith('.pages.dev')) {
+      return callback(null, true);
+    }
+
+    // Reject other origins
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
