@@ -12,6 +12,10 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8080;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/todo-app';
+const MAX_RETRIES = 5;
+const RETRY_INTERVAL = 5000; // 5 seconds
+
+let isConnected = false;
 
 // Middleware - CORS configuration
 app.use(cors({
@@ -43,25 +47,67 @@ app.use('/api', authRoutes);
 app.use('/api', todoRoutes);
 app.use('/api', welcomeRoutes);
 
-// Health check
+// Health check with MongoDB status
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Server is running' });
+  res.json({
+    status: 'OK',
+    message: 'Server is running',
+    mongodb: isConnected ? 'connected' : 'disconnected'
+  });
 });
 
-// Connect to MongoDB and start server
-mongoose
-  .connect(MONGODB_URI)
-  .then(() => {
-    console.log('Connected to MongoDB');
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+// MongoDB connection with retry logic
+async function connectWithRetry(retries = 0): Promise<void> {
+  try {
+    console.log(`Attempting to connect to MongoDB... (attempt ${retries + 1}/${MAX_RETRIES})`);
+
+    await mongoose.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
     });
-  })
-  .catch((error) => {
-    console.error('MongoDB connection error:', error);
-    process.exit(1);
-  });
+
+    isConnected = true;
+    console.log('✓ Connected to MongoDB successfully');
+
+  } catch (error) {
+    isConnected = false;
+    console.error(`✗ MongoDB connection error (attempt ${retries + 1}/${MAX_RETRIES}):`, error instanceof Error ? error.message : error);
+
+    if (retries < MAX_RETRIES - 1) {
+      console.log(`Retrying in ${RETRY_INTERVAL / 1000} seconds...`);
+      setTimeout(() => connectWithRetry(retries + 1), RETRY_INTERVAL);
+    } else {
+      console.error('\n❌ Failed to connect to MongoDB after maximum retries');
+      console.error('Please check:');
+      console.error('1. MongoDB Atlas IP whitelist includes Render IPs (or use 0.0.0.0/0 for all IPs)');
+      console.error('2. MongoDB URI is correct in environment variables');
+      console.error('3. MongoDB Atlas cluster is running');
+      console.error('\nServer will continue running, but database operations will fail.\n');
+    }
+  }
+}
+
+// Handle MongoDB disconnection
+mongoose.connection.on('disconnected', () => {
+  isConnected = false;
+  console.log('MongoDB disconnected. Attempting to reconnect...');
+  connectWithRetry(0);
+});
+
+mongoose.connection.on('error', (err) => {
+  isConnected = false;
+  console.error('MongoDB connection error:', err);
+});
+
+// Start server immediately and connect to MongoDB in background
+app.listen(PORT, () => {
+  console.log(`\n🚀 Server is running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`\nAttempting to connect to MongoDB...\n`);
+
+  // Start MongoDB connection
+  connectWithRetry(0);
+});
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {

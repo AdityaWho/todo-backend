@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, Context } from 'hono';
 import { cors } from 'hono/cors';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
@@ -14,7 +14,14 @@ type Bindings = {
   JWT_SECRET: string;
 };
 
-const app = new Hono<{ Bindings: Bindings }>();
+// Variables type for context
+type Variables = {
+  user: {
+    username: string;
+  };
+};
+
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // CORS middleware - allow localhost and all pages.dev domains
 app.use('/*', cors({
@@ -54,7 +61,7 @@ async function connectDB(mongoUri: string) {
 }
 
 // Auth middleware
-const authenticateToken = async (c: any, next: any) => {
+const authenticateToken = async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: () => Promise<void>) => {
   const authHeader = c.req.header('Authorization');
   const token = authHeader?.split(' ')[1];
 

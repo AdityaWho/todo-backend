@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, Context } from 'hono';
 import { cors } from 'hono/cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -11,7 +11,36 @@ type Bindings = {
   JWT_SECRET: string;
 };
 
-const app = new Hono<{ Bindings: Bindings }>();
+// Variables type for context
+type Variables = {
+  user: {
+    username: string;
+  };
+};
+
+// MongoDB response types
+interface MongoFindOneResponse {
+  document?: any;
+}
+
+interface MongoFindResponse {
+  documents?: any[];
+}
+
+interface MongoInsertResponse {
+  insertedId?: string;
+}
+
+interface MongoUpdateResponse {
+  matchedCount: number;
+  modifiedCount: number;
+}
+
+interface MongoDeleteResponse {
+  deletedCount: number;
+}
+
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // CORS middleware - allow localhost and all pages.dev domains
 app.use('/*', cors({
@@ -57,7 +86,7 @@ async function mongoDBRequest(env: Bindings, action: string, collection: string,
 }
 
 // Auth middleware
-const authenticateToken = async (c: any, next: any) => {
+const authenticateToken = async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: () => Promise<void>) => {
   const authHeader = c.req.header('Authorization');
   const token = authHeader?.split(' ')[1];
 
@@ -98,7 +127,7 @@ app.post('/api/signup', async (c) => {
     // Check if user exists
     const existingUser = await mongoDBRequest(c.env, 'findOne', 'users', {
       filter: { username },
-    });
+    }) as MongoFindOneResponse;
 
     if (existingUser.document) {
       return c.json({ message: 'Username already exists' }, 409);
@@ -146,7 +175,7 @@ app.post('/api/authenticate', async (c) => {
     // Find user
     const result = await mongoDBRequest(c.env, 'findOne', 'users', {
       filter: { username },
-    });
+    }) as MongoFindOneResponse;
 
     if (!result.document) {
       return c.json({ message: 'Invalid credentials' }, 401);
@@ -185,7 +214,7 @@ app.get('/api/users/:username/todos', authenticateToken, async (c) => {
     const result = await mongoDBRequest(c.env, 'find', 'todos', {
       filter: { username },
       sort: { id: 1 },
-    });
+    }) as MongoFindResponse;
 
     return c.json(result.documents || []);
   } catch (error: any) {
@@ -207,7 +236,7 @@ app.get('/api/users/:username/todos/:id', authenticateToken, async (c) => {
 
     const result = await mongoDBRequest(c.env, 'findOne', 'todos', {
       filter: { username, id },
-    });
+    }) as MongoFindOneResponse;
 
     if (!result.document) {
       return c.json({ message: 'Todo not found' }, 404);
@@ -237,7 +266,7 @@ app.post('/api/users/:username/todos', authenticateToken, async (c) => {
       filter: { username },
       sort: { id: -1 },
       limit: 1,
-    });
+    }) as MongoFindResponse;
 
     const nextId = lastTodo.documents && lastTodo.documents.length > 0
       ? lastTodo.documents[0].id + 1
@@ -287,7 +316,7 @@ app.put('/api/users/:username/todos/:id', authenticateToken, async (c) => {
     const result = await mongoDBRequest(c.env, 'updateOne', 'todos', {
       filter: { username, id },
       update: { $set: updateFields },
-    });
+    }) as MongoUpdateResponse;
 
     if (result.matchedCount === 0) {
       return c.json({ message: 'Todo not found' }, 404);
@@ -296,7 +325,7 @@ app.put('/api/users/:username/todos/:id', authenticateToken, async (c) => {
     // Fetch updated document
     const updated = await mongoDBRequest(c.env, 'findOne', 'todos', {
       filter: { username, id },
-    });
+    }) as MongoFindOneResponse;
 
     return c.json(updated.document);
   } catch (error: any) {
@@ -318,7 +347,7 @@ app.delete('/api/users/:username/todos/:id', authenticateToken, async (c) => {
 
     const result = await mongoDBRequest(c.env, 'deleteOne', 'todos', {
       filter: { username, id },
-    });
+    }) as MongoDeleteResponse;
 
     if (result.deletedCount === 0) {
       return c.json({ message: 'Todo not found' }, 404);
