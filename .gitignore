@@ -4,8 +4,8 @@ node_modules/
 # Build output
 dist/
 
-# Environment files
-.env
+# Environment files - KEEP .env for Render to use, but don't commit secrets to git
+# .env
 
 # Logs
 logs/
