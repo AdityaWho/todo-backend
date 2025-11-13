@@ -2,14 +2,6 @@ services:
   - type: web
     name: todo-backend
     env: node
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
-    envVars:
-      - key: MONGODB_URI
-        value: mongodb+srv://Jagadaditya:RJFjDSJlCOVYaID1@cluster0.pvunf0c.mongodb.net/todo-db?appName=Cluster0
-      - key: JWT_SECRET
-        value: your-secret-key-change-this-in-production
-      - key: PORT
-        value: 8080
-      - key: NODE_ENV
-        value: production
+    # Environment variables will be set in Render Dashboard (not here for security)
