@@ -33,6 +33,11 @@ app.use(cors({
       return callback(null, true);
     }
 
+    // Allow custom domain
+    if (origin === 'https://aditya.rtxsecured.com' || origin === 'http://aditya.rtxsecured.com') {
+      return callback(null, true);
+    }
+
     // Reject other origins
     callback(new Error('Not allowed by CORS'));
   },
